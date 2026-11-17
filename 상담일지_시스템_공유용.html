@@ -520,6 +520,9 @@ function showLoading(v, msg) {
 }
 
 // ===== 헬퍼 =====
+// (보안 수정2) 입력한 글을 화면 코드가 아닌 '글자 그대로' 표시
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const jsArg=v=>esc(JSON.stringify(String(v==null?'':v)));
 const DC={C:'#2563a0',A:'#5c2080',E:'#1a365d',M:'#7a4010',K:'#1a7a5c',S:'#8a1a1a',N:'#1a5c8a'};
 const dc=d=>DC[d]||'#4a6070';
 const GRADES=['1학년','2학년','3학년'];
@@ -690,7 +693,7 @@ function showMonthList(m,allJ){
   if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">이 달의 상담 기록이 없습니다.</td></tr>';}
   else list.forEach(j=>{const tr=document.createElement('tr');tr.style.cursor='pointer';
     const cd=j.sCls?j.sCls.split('_')[2]||j.sCls:'';
-    tr.innerHTML=`<td>${j.date}</td><td><b>${j.sName}</b></td><td>${j.sDept?`<span class="badge bdept">${j.sDept}</span>`:'-'}</td><td>${j.sGrade} ${cd}</td><td>${j.type}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${j.content}</td>`;
+    tr.innerHTML=`<td>${esc(j.date)}</td><td><b>${esc(j.sName)}</b></td><td>${j.sDept?`<span class="badge bdept">${esc(j.sDept)}</span>`:'-'}</td><td>${esc(j.sGrade)} ${esc(cd)}</td><td>${esc(j.type)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(j.content)}</td>`;
     tr.onclick=()=>openStudent(j.sid);tbody.appendChild(tr);
   });
   const wrap=document.getElementById('monthListWrap');wrap.style.display='block';wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -704,11 +707,11 @@ function renderHRDash(sts){
   sts.sort((a,b)=>parseInt(a.num||99)-parseInt(b.num||99));
   sts.forEach(s=>{const jcnt=s.journals?.length||0,ocnt=s.opinions?.length||0;
     const tr=document.createElement('tr');tr.style.cursor='pointer';
-    tr.innerHTML=`<td style="color:#aaa;">${s.num||'-'}</td><td><b>${s.name}</b></td>
-      <td style="font-size:12px;color:#607080;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.career||'미정'}</td>
+    tr.innerHTML=`<td style="color:#aaa;">${esc(s.num||'-')}</td><td><b>${esc(s.name)}</b></td>
+      <td style="font-size:12px;color:#607080;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.career||'미정')}</td>
       <td><span class="badge bb">${jcnt}회</span></td>
       <td>${ocnt?`<span class="badge" style="background:#fdf8ec;color:#8a6010;">${ocnt}개</span>`:'<span style="color:#ccc;font-size:12px;">-</span>'}</td>
-      <td><button class="btn bo bsm" onclick="openStudent('${s.id}')">보기</button></td>`;
+      <td><button class="btn bo bsm" onclick="openStudent(${jsArg(s.id)})">보기</button></td>`;
     tr.onclick=e=>{if(e.target.tagName!=='BUTTON')openStudent(s.id);};tbody.appendChild(tr);
   });
 }
@@ -736,12 +739,12 @@ function runDateSearch(){
   rows.sort((a,b)=>b.date.localeCompare(a.date));
   const el=document.getElementById('dateSearchResult');
   if(!rows.length){el.innerHTML='<div class="empty">해당 날짜의 상담 기록이 없습니다.</div>';return;}
-  el.innerHTML=`<div style="font-size:13px;color:#8899aa;margin-bottom:10px;">${from===to?from:from+' ~ '+to} · ${rows.length}건</div>`;
+  el.innerHTML=`<div style="font-size:13px;color:#8899aa;margin-bottom:10px;">${esc(from===to?from:from+' ~ '+to)} · ${rows.length}건</div>`;
   rows.forEach(r=>{const card=document.createElement('div');card.className='jcard';card.style.borderLeftColor=dc(r.sDept);
     const cd=r.sCls?r.sCls.split('_')[2]||r.sCls:'';
-    card.innerHTML=`<div class="jchdr"><div class="jcmeta"><b>${r.sName}</b>${r.sDept?`<span class="badge bdept">${r.sDept}과</span>`:''}<span style="font-size:12px;color:#8899aa;">${r.sGrade} ${cd} ${r.sNum}번</span></div><span class="badge bb">${r.type}</span></div>
-      <div style="font-size:13px;color:#2d3e4e;line-height:1.6;white-space:pre-wrap;">${r.content}</div>
-      ${r.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${r.followup}</div>`:''}`;
+    card.innerHTML=`<div class="jchdr"><div class="jcmeta"><b>${esc(r.sName)}</b>${r.sDept?`<span class="badge bdept">${esc(r.sDept)}과</span>`:''}<span style="font-size:12px;color:#8899aa;">${esc(r.sGrade)} ${esc(cd)} ${esc(r.sNum)}번</span></div><span class="badge bb">${esc(r.type)}</span></div>
+      <div style="font-size:13px;color:#2d3e4e;line-height:1.6;white-space:pre-wrap;">${esc(r.content)}</div>
+      ${r.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${esc(r.followup)}</div>`:''}`;
     card.onclick=()=>openStudent(r.sid);el.appendChild(card);
   });
 }
@@ -783,9 +786,9 @@ function renderAllJournals(){
     const hdr=document.createElement('div');hdr.className='dghdr';hdr.textContent=`${date}  ·  ${groups[date].length}건`;sec.appendChild(hdr);
     groups[date].forEach(r=>{const card=document.createElement('div');card.className='jcard';card.style.borderLeftColor=dc(r.sDept);
       const cd=r.sCls?r.sCls.split('_')[2]||r.sCls:'';
-      card.innerHTML=`<div class="jchdr"><div class="jcmeta"><b>${r.sName}</b>${r.sDept?`<span class="badge bdept">${r.sDept}과</span>`:''}<span style="font-size:12px;color:#8899aa;">${r.sGrade} ${cd} ${r.sNum}번</span></div><span class="badge bb">${r.type}</span></div>
-        <div style="font-size:13px;color:#2d3e4e;line-height:1.6;white-space:pre-wrap;">${r.content}</div>
-        ${r.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${r.followup}</div>`:''}`;
+      card.innerHTML=`<div class="jchdr"><div class="jcmeta"><b>${esc(r.sName)}</b>${r.sDept?`<span class="badge bdept">${esc(r.sDept)}과</span>`:''}<span style="font-size:12px;color:#8899aa;">${esc(r.sGrade)} ${esc(cd)} ${esc(r.sNum)}번</span></div><span class="badge bb">${esc(r.type)}</span></div>
+        <div style="font-size:13px;color:#2d3e4e;line-height:1.6;white-space:pre-wrap;">${esc(r.content)}</div>
+        ${r.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${esc(r.followup)}</div>`:''}`;
       card.onclick=()=>openStudent(r.sid);sec.appendChild(card);
     });
     list.appendChild(sec);
@@ -802,39 +805,39 @@ function openStudent(id){
   const timeline=[...journals.map((j,i)=>({...j,_t:'journal',_i:i})),...opinions.map((o,i)=>({...o,_t:'opinion',_i:i}))].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const isCar=currentUser.role==='career';
   let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px;background:#f8fafc;border-radius:8px;padding:13px;border:1px solid #e4eaf0;">
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">이름</div><div style="font-weight:700;">${s.name}</div></div>
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">성별</div><div>${s.gender||'-'}</div></div>
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">학과</div><div>${s.dept?`<span class="badge bdept">${s.dept}과</span>`:'-'}</div></div>
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">학년/반/번호</div><div>${s.grade} ${cls3} ${s.num||''}번</div></div>
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">연락처</div><div>${s.phone||'-'}</div></div>
-    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">희망 진로</div><div>${s.career||'-'}</div></div>
-    <div style="grid-column:1/-1;"><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">성적 특기사항</div><div style="white-space:pre-wrap;font-size:13px;">${s.gradeNote||'-'}</div></div>
-    <div style="grid-column:1/-1;"><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">기타 특기사항</div><div style="white-space:pre-wrap;font-size:13px;">${s.note||'-'}</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">이름</div><div style="font-weight:700;">${esc(s.name)}</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">성별</div><div>${esc(s.gender||'-')}</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">학과</div><div>${s.dept?`<span class="badge bdept">${esc(s.dept)}과</span>`:'-'}</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">학년/반/번호</div><div>${esc(s.grade)} ${esc(cls3)} ${esc(s.num||'')}번</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">연락처</div><div>${esc(s.phone||'-')}</div></div>
+    <div><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">희망 진로</div><div>${esc(s.career||'-')}</div></div>
+    <div style="grid-column:1/-1;"><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">성적 특기사항</div><div style="white-space:pre-wrap;font-size:13px;">${esc(s.gradeNote||'-')}</div></div>
+    <div style="grid-column:1/-1;"><div style="font-size:11px;color:#8899aa;font-weight:700;margin-bottom:2px;">기타 특기사항</div><div style="white-space:pre-wrap;font-size:13px;">${esc(s.note||'-')}</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <b style="color:#2c3e50;">상담 기록 (${journals.length}건)</b>
     <div style="display:flex;gap:7px;flex-wrap:wrap;">
-      ${isCar?`<button class="btn bo bsm" onclick="openEdit('${id}')">정보 수정</button>`:''}
+      ${isCar?`<button class="btn bo bsm" onclick="openEdit(${jsArg(id)})">정보 수정</button>`:''}
       ${isCar?`<button class="btn bp bsm" onclick="openJournalModal()">+ 상담 추가</button>`:''}
       <button class="opbtn" onclick="openOpinionModal()">💬 담임의견 추가</button>
-      ${isCar?`<button class="btn bd" onclick="delStudent('${id}')">삭제</button>`:''}
+      ${isCar?`<button class="btn bd" onclick="delStudent(${jsArg(id)})">삭제</button>`:''}
     </div>
   </div>`;
   if(!timeline.length)html+='<div class="empty">상담 기록이 없습니다.</div>';
   else timeline.forEach(item=>{
     if(item._t==='journal'){
-      html+=`<div class="je"><div class="jehdr"><span class="jedate">${item.date}</span>
-        <div style="display:flex;gap:6px;align-items:center;"><span class="badge bb">${item.type}</span>
-        ${isCar?`<button class="btn bd" onclick="delJournal('${id}',${item._i})">삭제</button>`:''}</div></div>
-        <div class="jebody">${item.content}</div>
-        ${item.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${item.followup}</div>`:''}
+      html+=`<div class="je"><div class="jehdr"><span class="jedate">${esc(item.date)}</span>
+        <div style="display:flex;gap:6px;align-items:center;"><span class="badge bb">${esc(item.type)}</span>
+        ${isCar?`<button class="btn bd" onclick="delJournal(${jsArg(id)},${item._i})">삭제</button>`:''}</div></div>
+        <div class="jebody">${esc(item.content)}</div>
+        ${item.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${esc(item.followup)}</div>`:''}
       </div>`;
     } else {
       html+=`<div class="je" style="background:#fdf8ec;border-color:#e8d898;">
-        <div class="jehdr"><span class="jedate" style="color:#8a6010;">💬 ${item.date} <span style="font-size:11px;color:#8899aa;">(담임의견)</span></span>
-        <button class="btn bd" onclick="delOpinion('${id}',${item._i})">삭제</button></div>
-        <div class="jebody" style="color:#5a3e10;">${item.content}</div>
-        ${item.writer?`<div style="margin-top:5px;font-size:11px;color:#8a6010;">작성: ${item.writer}</div>`:''}
+        <div class="jehdr"><span class="jedate" style="color:#8a6010;">💬 ${esc(item.date)} <span style="font-size:11px;color:#8899aa;">(담임의견)</span></span>
+        <button class="btn bd" onclick="delOpinion(${jsArg(id)},${item._i})">삭제</button></div>
+        <div class="jebody" style="color:#5a3e10;">${esc(item.content)}</div>
+        ${item.writer?`<div style="margin-top:5px;font-size:11px;color:#8a6010;">작성: ${esc(item.writer)}</div>`:''}
       </div>`;
     }
   });
@@ -942,18 +945,18 @@ function openEdit(id){
   const cls3=s.cls?s.cls.split('_')[2]||s.cls:'';
   const hr=getHR();const hrDepts=[...new Set(Object.keys(hr).map(k=>k.split('_')[0]))].sort();
   const list=hrDepts.length?hrDepts:ALL_DEPTS;
-  const dHtml=list.map(d=>`<button type="button" class="dbtn" style="color:${s.dept===d?'white':dc(d)};border-color:${dc(d)};background:${s.dept===d?dc(d):'white'};" onclick="selED(this,'${d}')">${d}</button>`).join('');
+  const dHtml=list.map(d=>`<button type="button" class="dbtn" style="color:${s.dept===d?'white':dc(d)};border-color:${dc(d)};background:${s.dept===d?dc(d):'white'};" onclick="selED(this,${jsArg(d)})">${esc(d)}</button>`).join('');
   document.getElementById('editFormGrid').innerHTML=`<div class="fg">
-    <div class="fgroup"><label>이름</label><input id="e-name" value="${s.name}"></div>
+    <div class="fgroup"><label>이름</label><input id="e-name" value="${esc(s.name)}"></div>
     <div class="fgroup"><label>성별</label><select id="e-gender"><option${s.gender==='남'?' selected':''}>남</option><option${s.gender==='여'?' selected':''}>여</option></select></div>
-    <div class="fgroup full"><label>학과</label><div style="display:flex;gap:7px;flex-wrap:wrap;">${dHtml}<input type="hidden" id="e-dept" value="${s.dept||''}"></div></div>
+    <div class="fgroup full"><label>학과</label><div style="display:flex;gap:7px;flex-wrap:wrap;">${dHtml}<input type="hidden" id="e-dept" value="${esc(s.dept||'')}"></div></div>
     <div class="fgroup"><label>학년</label><select id="e-grade"><option>1학년</option><option>2학년</option><option>3학년</option></select></div>
     <div class="fgroup"><label>반</label><select id="e-cls"><option value="">선택</option><option>1반</option><option>2반</option></select></div>
-    <div class="fgroup"><label>번호</label><input id="e-num" value="${s.num||''}"></div>
-    <div class="fgroup"><label>연락처</label><input id="e-phone" value="${s.phone||''}"></div>
-    <div class="fgroup full"><label>희망 진로</label><input id="e-career" value="${s.career||''}"></div>
-    <div class="fgroup full"><label>성적 특기사항</label><textarea id="e-gradeNote">${s.gradeNote||''}</textarea></div>
-    <div class="fgroup full"><label>기타 특기사항</label><textarea id="e-note">${s.note||''}</textarea></div>
+    <div class="fgroup"><label>번호</label><input id="e-num" value="${esc(s.num||'')}"></div>
+    <div class="fgroup"><label>연락처</label><input id="e-phone" value="${esc(s.phone||'')}"></div>
+    <div class="fgroup full"><label>희망 진로</label><input id="e-career" value="${esc(s.career||'')}"></div>
+    <div class="fgroup full"><label>성적 특기사항</label><textarea id="e-gradeNote">${esc(s.gradeNote||'')}</textarea></div>
+    <div class="fgroup full"><label>기타 특기사항</label><textarea id="e-note">${esc(s.note||'')}</textarea></div>
   </div>`;
   document.getElementById('e-grade').value=s.grade;
   document.getElementById('e-cls').value=cls3;
@@ -989,9 +992,9 @@ function doHeaderSearch(){
     const cls3=s.cls?s.cls.split('_')[2]||s.cls:'';
     const div=document.createElement('div');div.className='jcard';div.style.borderLeftColor=dc(s.dept||'');div.style.cursor='pointer';
     const cnt=s.journals?.length||0,ocnt=s.opinions?.length||0;
-    div.innerHTML=`<div class="jchdr"><div class="jcmeta"><b style="font-size:15px;">${s.name}</b>${s.dept?`<span class="badge bdept">${s.dept}과</span>`:''}<span style="color:#8899aa;font-size:12px;">${s.grade} ${cls3} ${s.num||''}번</span></div>
+    div.innerHTML=`<div class="jchdr"><div class="jcmeta"><b style="font-size:15px;">${esc(s.name)}</b>${s.dept?`<span class="badge bdept">${esc(s.dept)}과</span>`:''}<span style="color:#8899aa;font-size:12px;">${esc(s.grade)} ${esc(cls3)} ${esc(s.num||'')}번</span></div>
       <div style="display:flex;gap:5px;"><span class="badge bg">${cnt}회 상담</span>${ocnt?`<span class="badge" style="background:#fdf8ec;color:#8a6010;">${ocnt}개 의견</span>`:''}</div></div>
-      <div style="font-size:13px;color:#607080;">희망 진로: ${s.career||'미정'}</div>`;
+      <div style="font-size:13px;color:#607080;">희망 진로: ${esc(s.career||'미정')}</div>`;
     div.onclick=()=>openStudent(s.id);el.appendChild(div);
   });
   go('dateSearch',document.getElementById('m-dateSearch'));
@@ -1105,12 +1108,12 @@ function renderHRCards(){
   classes.forEach((c,ci)=>{
     const ikey=hrDept+'_'+hrGrade+'_'+c;const entry=info[ikey]||{};const sid=ikey.replace(/\s/g,'_');
     const card=document.createElement('div');card.className='hrcard';
-    card.innerHTML=`<b style="min-width:40px;font-size:14px;color:#2c3e50;">${c}</b>
-      <input type="text" id="nm_${sid}" placeholder="담임 선생님 이름" value="${entry.teacherName||''}" style="width:150px;">
-      <input type="password" id="pw_${sid}" placeholder="${entry.hasPw?'설정됨 (바꿀 때만 입력)':'암호 미설정 (6자 이상)'}" value="" autocomplete="new-password" style="width:170px;">
-      <button class="btn bp bsm" onclick="saveHRCard('${ikey}','${sid}')">저장</button>
-      <span id="sv_${sid}" class="hrsaved">✓ 저장됨</span>
-      <button class="xbtn" style="font-size:18px;margin-left:auto;" onclick="delHRClass('${key}',${ci})">×</button>`;
+    card.innerHTML=`<b style="min-width:40px;font-size:14px;color:#2c3e50;">${esc(c)}</b>
+      <input type="text" id="nm_${esc(sid)}" placeholder="담임 선생님 이름" value="${esc(entry.teacherName||'')}" style="width:150px;">
+      <input type="password" id="pw_${esc(sid)}" placeholder="${entry.hasPw?'설정됨 (바꿀 때만 입력)':'암호 미설정 (6자 이상)'}" value="" autocomplete="new-password" style="width:170px;">
+      <button class="btn bp bsm" onclick="saveHRCard(${jsArg(ikey)},${jsArg(sid)})">저장</button>
+      <span id="sv_${esc(sid)}" class="hrsaved">✓ 저장됨</span>
+      <button class="xbtn" style="font-size:18px;margin-left:auto;" onclick="delHRClass(${jsArg(key)},${ci})">×</button>`;
     grid.appendChild(card);
   });
 }
