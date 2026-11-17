@@ -201,6 +201,7 @@ tr:hover td{background:#f8fafc;}
         <li id="m-dashboard" onclick="go('dashboard',this)">🏠 대시보드</li>
         <li id="m-dateSearch" onclick="go('dateSearch',this)" class="career-only">📅 날짜 검색</li>
         <li id="m-allJournals" onclick="go('allJournals',this)" class="career-only">📋 전체 상담일지</li>
+        <li id="m-monthly" onclick="go('monthly',this)" class="career-only">🗂️ 월별 총괄표</li>
         <li id="m-addStudent" onclick="go('addStudent',this)" class="career-only">📝 상담일지 등록</li>
         <li id="m-settings" onclick="go('settings',this)" class="career-only">⚙️ 환경 설정</li>
         <li id="m-guide" onclick="openGuide()" class="homeroom-only">❓ 사용 안내</li>
@@ -257,12 +258,23 @@ tr:hover td{background:#f8fafc;}
         <div class="fwrap">
           <label>기간</label><input type="date" id="aj-from"><span style="color:#b0bec5;">—</span><input type="date" id="aj-to">
           <label>학과</label><select id="aj-dept"><option value="">전체</option></select>
-          <label>유형</label><select id="aj-type"><option value="">전체</option><option>진로상담</option><option>학업상담</option><option>생활상담</option><option>기타</option></select>
+          <label>유형</label><select id="aj-type"><option value="">전체</option><option>진학상담</option><option>진로상담</option><option>기타</option><option>학업상담</option><option>생활상담</option></select>
           <button class="btn bp bsm" onclick="renderAllJournals()">조회</button>
           <button class="btn bo bsm" onclick="resetAjFilter()">초기화</button>
           <span id="aj-count" style="font-size:12px;color:#8899aa;margin-left:auto;"></span>
         </div>
         <div id="allJournalList"></div>
+      </div>
+
+      <div class="page" id="page-monthly"><!-- (총괄표 추가) -->
+        <div class="ptitle">월별 진로 상담 총괄표</div>
+        <div class="fwrap">
+          <label>월</label><input type="month" id="mo-month" onchange="renderMonthly()">
+          <button class="btn bs bsm" onclick="downloadMonthly()">⬇ 한글 파일(.hwpx) 내려받기</button>
+          <span id="moSum" style="font-size:12px;color:#607080;margin-left:auto;"></span>
+        </div>
+        <div style="font-size:12px;color:#8899aa;margin-bottom:8px;">노란 줄은 상담 시간·요약이 없는 예전 기록입니다(1시간·내용 첫 줄로 채움). 여기서 고친 값은 내려받는 파일에만 들어가고 상담일지에는 저장되지 않습니다.</div>
+        <div class="card" style="padding:0;overflow-x:auto;" id="moList" oninput="moEdit(event)" onchange="moEdit(event)"></div>
       </div>
 
       <div class="page" id="page-addStudent">
@@ -396,7 +408,9 @@ tr:hover td{background:#f8fafc;}
 <div class="mbg" id="journalModal"><div class="modal"><h3>상담 내용 추가</h3>
   <div class="fg">
     <div class="fgroup"><label>날짜</label><input type="date" id="j-date"></div>
-    <div class="fgroup"><label>유형</label><select id="j-type"><option>진로상담</option><option>학업상담</option><option>생활상담</option><option>기타</option></select></div>
+    <div class="fgroup"><label>유형</label><select id="j-type"><option>진학상담</option><option selected>진로상담</option><option>기타</option></select></div>
+    <div class="fgroup"><label>상담 시간</label><select id="j-hours"><option value="0.5">0.5시간</option><option value="1" selected>1시간</option><option value="1.5">1.5시간</option><option value="2">2시간</option><option value="2.5">2.5시간</option><option value="3">3시간</option></select></div>
+    <div class="fgroup"><label>총괄표용 한 줄 요약</label><input type="text" id="j-summary" maxlength="40" placeholder="예: 보건계열 진학 문의"></div>
     <div class="fgroup full"><label>상담 내용</label><textarea id="j-content" style="min-height:110px;"></textarea></div>
     <div class="fgroup full"><label>후속조치</label><textarea id="j-followup"></textarea></div>
   </div>
@@ -669,6 +683,7 @@ function go(pid,el){
   if(pid==='dashboard')renderDashboard();
   if(pid==='settings')renderSettings();
   if(pid==='allJournals')initAllJournals();
+  if(pid==='monthly')initMonthly();
   if(pid==='addStudent'){jiCount=0;document.getElementById('jiList').innerHTML='';addJI();buildRegDeptBtns();}
   if(pid==='dateSearch'){const t=new Date().toISOString().split('T')[0];document.getElementById('ds-date').value=t;document.getElementById('ds-from').value=t;document.getElementById('ds-to').value=t;}
 }
@@ -849,8 +864,9 @@ function openStudent(id){
   else timeline.forEach(item=>{
     if(item._t==='journal'){
       html+=`<div class="je"><div class="jehdr"><span class="jedate">${esc(item.date)}</span>
-        <div style="display:flex;gap:6px;align-items:center;"><span class="badge bb">${esc(item.type)}</span>
+        <div style="display:flex;gap:6px;align-items:center;">${item.hours?`<span style="font-size:11px;color:#8899aa;">${esc(item.hours)}시간</span>`:''}<span class="badge bb">${esc(item.type)}</span>
         ${isCar?`<button class="btn bd" onclick="delJournal(${jsArg(id)},${item._i})">삭제</button>`:''}</div></div>
+        ${item.summary?`<div style="font-size:12px;color:#4a90b8;margin-bottom:4px;"><b>요약:</b> ${esc(item.summary)}</div>`:''}
         <div class="jebody">${esc(item.content)}</div>
         ${item.followup?`<div style="margin-top:6px;font-size:12px;color:#607080;"><b>후속조치:</b> ${esc(item.followup)}</div>`:''}
       </div>`;
@@ -885,12 +901,12 @@ async function delOpinion(id,idx){
   const c=cloneS(s);c.opinions.splice(idx,1);
   if(await apiSaveStudent(c))openStudent(id);
 }
-function openJournalModal(){document.getElementById('j-date').value=new Date().toISOString().split('T')[0];document.getElementById('j-content').value='';document.getElementById('j-followup').value='';document.getElementById('journalModal').classList.add('open');}
+function openJournalModal(){document.getElementById('j-date').value=new Date().toISOString().split('T')[0];document.getElementById('j-content').value='';document.getElementById('j-followup').value='';document.getElementById('j-hours').value='1';document.getElementById('j-summary').value='';document.getElementById('journalModal').classList.add('open');}
 async function saveJournal(){
-  const date=document.getElementById('j-date').value,type=document.getElementById('j-type').value,content=document.getElementById('j-content').value.trim(),followup=document.getElementById('j-followup').value.trim();
+  const date=document.getElementById('j-date').value,type=document.getElementById('j-type').value,content=document.getElementById('j-content').value.trim(),followup=document.getElementById('j-followup').value.trim(),hours=Number(document.getElementById('j-hours').value)||1,summary=document.getElementById('j-summary').value.trim();
   if(!date||!content){alert('날짜와 상담 내용을 입력해주세요.');return;}
   const s=getStudents().find(x=>x.id===currentStudentId);if(!s)return;
-  const c=cloneS(s);if(!c.journals)c.journals=[];c.journals.push({date,type,content,followup});
+  const c=cloneS(s);if(!c.journals)c.journals=[];c.journals.push({date,type,content,followup,hours,summary});
   if(!await apiSaveStudent(c))return;   // 실패하면 입력 창을 닫지 않음
   closeMod('journalModal');openStudent(currentStudentId);
 }
@@ -928,7 +944,9 @@ function addJI(){
   <div class="jirow">
     <div style="display:flex;flex-direction:column;gap:6px;">
       <input type="date" id="ji-date-${idx}" value="${new Date().toISOString().split('T')[0]}">
-      <select id="ji-type-${idx}"><option>진로상담</option><option>학업상담</option><option>생활상담</option><option>기타</option></select>
+      <select id="ji-type-${idx}"><option>진학상담</option><option selected>진로상담</option><option>기타</option></select>
+      <select id="ji-hours-${idx}" title="상담 시간"><option value="0.5">0.5시간</option><option value="1" selected>1시간</option><option value="1.5">1.5시간</option><option value="2">2시간</option><option value="2.5">2.5시간</option><option value="3">3시간</option></select>
+      <input type="text" id="ji-summary-${idx}" maxlength="40" placeholder="한 줄 요약(총괄표용)">
     </div>
     <textarea id="ji-content-${idx}" placeholder="상담 내용을 입력하세요..."></textarea>
   </div>`;
@@ -944,7 +962,8 @@ async function addStudent(){
   const journals=[];
   document.querySelectorAll('[id^="ji-date-"]').forEach(el=>{
     const i=el.id.split('-')[2],date=el.value,type=document.getElementById(`ji-type-${i}`)?.value||'진로상담',content=document.getElementById(`ji-content-${i}`)?.value.trim()||'';
-    if(date&&content)journals.push({date,type,content,followup:''});
+    const hours=Number(document.getElementById(`ji-hours-${i}`)?.value)||1,summary=document.getElementById(`ji-summary-${i}`)?.value.trim()||'';
+    if(date&&content)journals.push({date,type,content,followup:'',hours,summary});
   });
   const clsKey=dept+'_'+grade+'_'+cls;
   const s={id:Date.now().toString(36)+Math.random().toString(36).slice(2),name,grade,cls:clsKey,dept,
@@ -1214,6 +1233,130 @@ function today(){return new Date().toISOString().slice(0,10).replace(/-/g,'');}
 function openGuide(){document.getElementById('guideModal').classList.add('open');}
 function closeMod(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.mbg').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
+
+// ===== 월별 총괄표 (총괄표 추가) =====
+// 상담일지 기록을 골라 결재 양식(한글 .hwpx) 그대로 채워 내려받음. 서버에는 아무것도 보내지 않음.
+const HWPX_TPL='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';
+const MO_PER_PAGE=17, MO_MIN_ROWS=14;
+let mRows=[];
+const catOf=t=>t==='진학상담'?'진학':t==='진로상담'?'진로':'기타';
+const moNum=n=>String(Math.round((Number(n)||0)*100)/100);
+function moHakbun(s){
+  const g=String(s.grade||'').replace(/\D/g,''),c=String((s.cls||'').split('_')[2]||'').replace(/\D/g,''),n=String(s.num||'').replace(/\D/g,'');
+  return (s.dept||'')+g+c+(n?n.padStart(2,'0'):'');
+}
+function moFirstLine(t){const l=String(t||'').split('\n').map(x=>x.trim()).find(x=>x)||'';return l.length>30?l.slice(0,30)+'…':l;}
+function initMonthly(){
+  const el=document.getElementById('mo-month');
+  if(!el.value){const d=new Date();el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+  renderMonthly();
+}
+function renderMonthly(){
+  const ym=document.getElementById('mo-month').value;if(!ym)return;
+  mRows=[];
+  getStudents().forEach(s=>(s.journals||[]).forEach(j=>{
+    if(!j.date||!j.date.startsWith(ym))return;
+    const sum=String(j.summary||'').trim();
+    mRows.push({date:j.date,hb:moHakbun(s),name:s.name||'',hours:Number(j.hours)||1,cat:catOf(j.type),
+      summary:sum||moFirstLine(j.content),auto:!j.hours||!sum});
+  }));
+  mRows.sort((a,b)=>a.date.localeCompare(b.date)||a.hb.localeCompare(b.hb));
+  const box=document.getElementById('moList');
+  if(!mRows.length){box.innerHTML='<div class="empty">이 달의 상담 기록이 없습니다.</div>';moTotals();return;}
+  let h=`<table><thead><tr><th>연번</th><th>일자</th><th>학번</th><th>시간</th><th>성명</th><th>구분</th><th>상담 내용 (간략히)</th></tr></thead><tbody>`;
+  mRows.forEach((r,i)=>{
+    h+=`<tr${r.auto?' style="background:#fff8e1;"':''}><td>${i+1}</td><td>${esc(r.date.slice(5).replace('-','.'))}</td><td>${esc(r.hb)}</td>
+      <td><input type="number" min="0.5" step="0.5" data-i="${i}" data-k="hours" value="${esc(r.hours)}" style="width:56px;"></td>
+      <td>${esc(r.name)}</td>
+      <td><select data-i="${i}" data-k="cat">${['진학','진로','기타'].map(c=>`<option${c===r.cat?' selected':''}>${c}</option>`).join('')}</select></td>
+      <td><input type="text" data-i="${i}" data-k="summary" value="${esc(r.summary)}" style="width:100%;"></td></tr>`;
+  });
+  box.innerHTML=h+'</tbody></table>';
+  moTotals();
+}
+function moEdit(e){
+  const el=e.target,i=el.dataset.i,k=el.dataset.k;if(i==null||!k||!mRows[i])return;
+  mRows[i][k]=k==='hours'?(Number(el.value)||0):el.value;moTotals();
+}
+function moCalc(){
+  const tot=mRows.reduce((a,r)=>a+(Number(r.hours)||0),0);
+  const cnt={진학:0,진로:0,기타:0};mRows.forEach(r=>cnt[r.cat]++);
+  return {tot,avg:tot/4,cnt};
+}
+function moTotals(){
+  const {tot,avg,cnt}=moCalc();
+  document.getElementById('moSum').textContent=`총 ${mRows.length}건 · 총시간 ${moNum(tot)} · 주당 평균시간 ${moNum(avg)} (÷4) · 진학 ${cnt.진학} / 진로 ${cnt.진로} / 기타 ${cnt.기타}`;
+}
+async function moLoadTpl(){
+  if(moLoadTpl.c)return moLoadTpl.c;
+  const bin=Uint8Array.from(atob(HWPX_TPL),c=>c.charCodeAt(0));
+  const txt=await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return moLoadTpl.c=JSON.parse(txt);
+}
+const moXml=v=>String(v==null?'':v).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const moFill=(t,o)=>t.replace(/\{\{(\w+)\}\}/g,(m,k)=>k in o?o[k]:'');
+function moSection(T,ym,rows){
+  const [y,m]=ym.split('-').map(Number);
+  let tot=0;const cnt={진학:0,진로:0,기타:0};rows.forEach(r=>{tot+=Number(r.hours)||0;cnt[r.cat]++;});
+  const head={TITLE:moXml(`${y}년  ${m}월 진로 상담 총괄표 `),SUM:moXml(`총시간 :  ${moNum(tot)}       주당 평균시간 : ${moNum(tot/4)}`)};
+  const pages=[];for(let i=0;i<rows.length;i+=MO_PER_PAGE)pages.push(rows.slice(i,i+MO_PER_PAGE));
+  if(!pages.length)pages.push([]);
+  let out=T.prefix,id=2131416000;
+  pages.forEach((pg,p)=>{
+    const last=p===pages.length-1,n=pages.length===1?Math.max(pg.length,MO_MIN_ROWS):pg.length;
+    out+=moFill(p===0?T.title:T.title2.replace(/hp:tbl id="\d+"/,`hp:tbl id="${id++}"`),head);
+    let body='';
+    for(let i=0;i<n;i++){
+      const r=pg[i],no=p*MO_PER_PAGE+i+1;
+      const c=r?[no,(([mm,dd])=>`${+mm}.${+dd}`)(r.date.slice(5).split('-')),r.hb,moNum(r.hours)+'시간',r.name,
+        r.cat==='진학'?'0':'',r.cat==='진로'?'0':'',r.cat==='기타'?'0':'',r.summary]:Array(9).fill('');
+      const o={R:i+2,BF:i===0?7:(i===n-1?10:9)};c.forEach((v,k)=>o['C'+k]=moXml(v));
+      body+=moFill(T.rowTpl,o);
+    }
+    const rc=n+2+(last?1:0),th=T.heights.hdr+n*T.heights.row+(last?T.heights.tot:0);
+    if(last)body+=moFill(T.totTpl,{R:n+2,T0:'계',T3:moXml(moNum(tot)),T4:'',T5:cnt.진학,T6:cnt.진로,T7:cnt.기타,T8:''});
+    out+=moFill(T.tblHead,{ROWCNT:rc,TBLH:th}).replace(/hp:tbl id="2131415991"/,`hp:tbl id="${id++}"`)+T.hdrRows+body+T.tblTail;
+  });
+  return out+T.end;
+}
+// --- zip(무압축) 만들기 ---
+const MO_CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+const moCrc=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=MO_CRC[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;};
+function moZip(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  files.forEach(([name,data])=>{
+    const nb=enc.encode(name),d=typeof data==='string'?enc.encode(data):data,crc=moCrc(d);
+    const lh=new DataView(new ArrayBuffer(30));
+    [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[8,0,2],[10,0,2],[12,0x21,2],[14,crc,4],[18,d.length,4],[22,d.length,4],[26,nb.length,2],[28,0,2]]
+      .forEach(([o,v,s])=>s===4?lh.setUint32(o,v,true):lh.setUint16(o,v,true));
+    const ch=new DataView(new ArrayBuffer(46));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[10,0,2],[12,0,2],[14,0x21,2],[16,crc,4],[20,d.length,4],[24,d.length,4],[28,nb.length,2],[30,0,2],[32,0,2],[34,0,2],[36,0,2],[38,0,4],[42,off,4]]
+      .forEach(([o,v,s])=>s===4?ch.setUint32(o,v,true):ch.setUint16(o,v,true));
+    parts.push(new Uint8Array(lh.buffer),nb,d);cen.push(new Uint8Array(ch.buffer),nb);
+    off+=30+nb.length+d.length;
+  });
+  const cl=cen.reduce((a,b)=>a+b.length,0),end=new DataView(new ArrayBuffer(22));
+  [[0,0x06054b50,4],[4,0,2],[6,0,2],[8,files.length,2],[10,files.length,2],[12,cl,4],[16,off,4],[20,0,2]]
+    .forEach(([o,v,s])=>s===4?end.setUint32(o,v,true):end.setUint16(o,v,true));
+  return new Blob([...parts,...cen,new Uint8Array(end.buffer)],{type:'application/hwp+zip'});
+}
+async function moBuildHwpx(ym,rows){
+  const T=await moLoadTpl(),F=T.files;
+  const prv=rows.map((r,i)=>`<${i+1}><${r.date}><${r.hb}><${r.name}><${r.cat}><${r.summary}>`).join('\r\n');
+  return moZip([['mimetype','application/hwp+zip'],['version.xml',F['version.xml']],['Contents/header.xml',F['Contents/header.xml']],
+    ['Contents/section0.xml',moSection(T,ym,rows)],['Preview/PrvText.txt',prv],['settings.xml',F['settings.xml']],
+    ['META-INF/container.rdf',F['META-INF/container.rdf']],['Contents/content.hpf',F['Contents/content.hpf']],
+    ['META-INF/container.xml',F['META-INF/container.xml']],['META-INF/manifest.xml',F['META-INF/manifest.xml']]]);
+}
+async function downloadMonthly(){
+  const ym=document.getElementById('mo-month').value;if(!ym){alert('월을 선택해주세요.');return;}
+  if(!mRows.length&&!confirm('이 달의 상담 기록이 없습니다. 빈 총괄표를 내려받을까요?'))return;
+  try{
+    const blob=await moBuildHwpx(ym,mRows),[y,m]=ym.split('-');
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${y}년_${+m}월_진로상담_총괄표.hwpx`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  }catch(e){alert('파일을 만들지 못했습니다. 크롬 최신 버전인지 확인해주세요.');}
+}
 
 // ===== 초기 실행 =====
 (async()=>{
