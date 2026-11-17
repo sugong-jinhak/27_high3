@@ -319,7 +319,8 @@ tr:hover td{background:#f8fafc;}
         <div class="ssec">
           <div class="stitle">🔑 진로교사 암호</div>
           <div class="pwbox">
-            <input type="password" id="newCareerPw" placeholder="새 암호 입력" style="padding:8px 11px;border:1.5px solid #dde3ea;border-radius:7px;font-size:13px;width:180px;">
+            <input type="password" id="newCareerPw" placeholder="새 암호 (6자 이상)" autocomplete="new-password" style="padding:8px 11px;border:1.5px solid #dde3ea;border-radius:7px;font-size:13px;width:180px;">
+            <input type="password" id="newCareerPw2" placeholder="새 암호 한 번 더" autocomplete="new-password" style="padding:8px 11px;border:1.5px solid #dde3ea;border-radius:7px;font-size:13px;width:180px;">
             <button class="btn bp bsm" onclick="changeCareerPw()">변경</button>
           </div>
         </div>
@@ -395,61 +396,122 @@ const API = 'https://script.google.com/macros/s/AKfycbyt_cQFHcMgJtIJ3AZaESjoruQW
 // =============================================
 
 // ===== 메모리 캐시 =====
+// (보안 수정) 암호는 이 파일에 적지 않고, 서버가 확인합니다.
+const MIN_PW = 6;   // 새 암호 최소 길이 (Apps Script의 MIN_PW_LENGTH와 같게)
 let students = [];
 let config = {
-  careerPw: '4836',
   years: [new Date().getFullYear()],
   activeYear: new Date().getFullYear(),
   hr: {},
   classInfo: {}
 };
+// 로그인 정보: 메모리에만 보관 (브라우저 저장소에 저장하지 않음, 새로고침하면 사라짐)
+let auth = null;
 
-// ===== API 통신 =====
-async function apiFetch(params) {
-  const url = API + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url);
-  return res.json();
+// ===== API 통신 (모두 POST, 암호는 주소가 아닌 본문으로만 전송) =====
+async function api(action, payload) {
+  const body = Object.assign({action}, payload || {});
+  if (auth && action !== 'public') body.auth = auth;
+  let res, data;
+  try {
+    res = await fetch(API, {method:'POST', body:JSON.stringify(body)});
+  } catch(e) {
+    throw new Error('서버에 연결하지 못했습니다. 인터넷 연결 또는 Apps Script 배포 설정을 확인해 주세요.');
+  }
+  try { data = await res.json(); }
+  catch(e) { throw new Error('서버 응답을 읽지 못했습니다.'); }
+  if (data.error) { const err = new Error(data.error); err.code = data.code; throw err; }
+  return data;
 }
 
-async function loadAll() {
-  showLoading(true, '구글 시트에서 데이터 불러오는 중...');
+// 오류 알림. 암호가 바뀌었거나 잠긴 경우에는 로그아웃
+function handleApiError(e, what) {
+  if (e.code === 'AUTH' && currentUser) {
+    alert('로그인 정보를 다시 확인해야 합니다.\n' + e.message);
+    doLogout();
+  } else {
+    alert(what + ' 실패: ' + e.message + '\n(저장되지 않았습니다)');
+  }
+}
+
+// 시작할 때: 로그인 목록용 공개 정보만 (학과·학년·반·담임 이름·연도)
+async function loadPublic() {
+  showLoading(true, '로그인 정보 불러오는 중...');
   try {
-    const [sd, cd] = await Promise.all([
-      apiFetch({action:'getAll'}),
-      apiFetch({action:'getConfig'})
-    ]);
-    students = sd.students || [];
-    const raw = cd.config || {};
-    config = {
-      careerPw: raw.careerPw || '4836',
-      years: raw.years || [new Date().getFullYear()],
-      activeYear: parseInt(raw.activeYear) || new Date().getFullYear(),
-      hr: raw.hr || {},
-      classInfo: raw.classInfo || {}
-    };
+    const p = (await api('public')).public || {};
+    config.years = p.years && p.years.length ? p.years : config.years;
+    config.activeYear = parseInt(p.activeYear) || config.activeYear;
+    config.hr = p.hr || {};
+    config.classInfo = p.classes || {};
   } catch(e) {
-    alert('구글 시트 연결 실패.\nApps Script URL을 확인해주세요.');
+    alert('구글 시트 연결 실패.\n' + e.message);
   }
   showLoading(false);
 }
 
+function applyLoaded(d) {
+  students = d.students || [];
+  const c = d.config || {};
+  config = {
+    years: c.years && c.years.length ? c.years : [new Date().getFullYear()],
+    activeYear: parseInt(c.activeYear) || new Date().getFullYear(),
+    hr: c.hr || {},
+    classInfo: c.classInfo || {}
+  };
+}
+
+async function reloadData() {
+  try { applyLoaded(await api('load')); return true; }
+  catch(e) { handleApiError(e, '데이터 불러오기'); return false; }
+}
+
+// 저장 성공 시에만 화면 데이터를 바꿈. 성공하면 true
 async function apiSaveStudent(s) {
   showLoading(true, '저장 중...');
-  await apiFetch({action:'save', data:JSON.stringify(s)});
-  const idx = students.findIndex(x => x.id === s.id);
-  if (idx >= 0) students[idx] = s; else students.push(s);
-  showLoading(false);
+  try {
+    await api('save', {student:s});
+    const idx = students.findIndex(x => x.id === s.id);
+    if (idx >= 0) students[idx] = s; else students.push(s);
+    showLoading(false);
+    return true;
+  } catch(e) {
+    showLoading(false);
+    handleApiError(e, '저장');
+    return false;
+  }
 }
 
 async function apiDeleteStudent(id) {
   showLoading(true, '삭제 중...');
-  await apiFetch({action:'delete', id});
-  students = students.filter(x => x.id !== id);
-  showLoading(false);
+  try {
+    await api('delete', {id});
+    students = students.filter(x => x.id !== id);
+    showLoading(false);
+    return true;
+  } catch(e) {
+    showLoading(false);
+    handleApiError(e, '삭제');
+    return false;
+  }
 }
 
-async function saveConfig() {
-  await apiFetch({action:'setConfig', data:JSON.stringify(config)});
+// 설정 저장: 암호는 보내지 않음. 반 암호는 extra에 newPw가 있을 때만 서버에서 바뀜
+async function saveConfig(extra) {
+  const ci = {};
+  Object.keys(config.classInfo || {}).forEach(k => { ci[k] = {teacherName: config.classInfo[k].teacherName || ''}; });
+  if (extra) Object.keys(extra).forEach(k => { ci[k] = Object.assign({}, ci[k], extra[k]); });
+  showLoading(true, '설정 저장 중...');
+  try {
+    const d = await api('setConfig', {config:{years:config.years, activeYear:config.activeYear, hr:config.hr, classInfo:ci}});
+    if (d.config) applyLoaded({students, config:d.config});
+    showLoading(false);
+    return true;
+  } catch(e) {
+    showLoading(false);
+    handleApiError(e, '설정 저장');
+    if (currentUser && e.code !== 'AUTH') await reloadData();   // 화면을 서버 상태로 되돌림
+    return false;
+  }
 }
 
 function showLoading(v, msg) {
@@ -463,7 +525,6 @@ const dc=d=>DC[d]||'#4a6070';
 const GRADES=['1학년','2학년','3학년'];
 const ALL_DEPTS=['C','A','E','M','K','S','N'];
 const getStudents=()=>students;
-const getCareerPw=()=>config.careerPw;
 const getYears=()=>config.years;
 const getActiveYear=()=>config.activeYear;
 const getHR=()=>config.hr;
@@ -519,27 +580,44 @@ function buildLoginClassSel(){
   }
   classes.forEach(c=>{const o=document.createElement('option');o.value=dept+'_'+grade+'_'+c;o.textContent=c;sel.appendChild(o);});
 }
-function doLogin(){
+// (보안 수정) 암호 확인은 서버가 함. 성공하면 그때 데이터를 받음
+async function doLogin(){
   const err=document.getElementById('loginError');err.textContent='';
+  let a,dept='',grade='';
   if(loginRole==='career'){
-    if(document.getElementById('careerPwInput').value===getCareerPw()){currentUser={role:'career'};startMain();}
-    else err.textContent='암호가 올바르지 않습니다.';
+    const pw=document.getElementById('careerPwInput').value;
+    if(!pw){err.textContent='암호를 입력해주세요.';return;}
+    a={role:'career',pw};
   } else {
-    const dept=document.getElementById('loginDept').value;
-    const grade=document.getElementById('loginGrade').value;
+    dept=document.getElementById('loginDept').value;
+    grade=document.getElementById('loginGrade').value;
     const clsVal=document.getElementById('loginClass').value;
     const pw=document.getElementById('loginPw').value;
     if(!dept){err.textContent='학과를 선택해주세요.';return;}
     if(!grade){err.textContent='학년을 선택해주세요.';return;}
     if(!clsVal){err.textContent='반을 선택해주세요.';return;}
-    const info=getClassInfo();const stored=info[clsVal]?.pw||'';
-    if(!stored){err.textContent='해당 반의 암호가 설정되지 않았습니다.';return;}
-    if(pw===stored){currentUser={role:'homeroom',dept,grade,cls:clsVal,name:info[clsVal]?.teacherName||''};startMain();}
-    else err.textContent='암호가 올바르지 않습니다.';
+    if(!pw){err.textContent='암호를 입력해주세요.';return;}
+    a={role:'homeroom',cls:clsVal,pw};
+  }
+  showLoading(true,'로그인 확인 중...');
+  auth=a;
+  try{
+    const d=await api('load');
+    applyLoaded(d);
+    const u=d.user||{};
+    currentUser=u.role==='career'?{role:'career'}:{role:'homeroom',dept,grade,cls:u.cls,name:u.name||''};
+    document.getElementById('careerPwInput').value='';
+    document.getElementById('loginPw').value='';
+    showLoading(false);
+    startMain();
+  }catch(e){
+    auth=null;showLoading(false);
+    err.textContent=e.message;
   }
 }
 function doLogout(){
-  currentUser=null;
+  currentUser=null;auth=null;students=[];
+  document.querySelectorAll('.mbg.open').forEach(m=>m.classList.remove('open'));
   document.getElementById('mainScreen').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('careerPwInput').value='';
@@ -763,27 +841,32 @@ function openStudent(id){
   document.getElementById('modalContent').innerHTML=html;
   document.getElementById('studentModal').classList.add('open');
 }
+// (보안 수정) 사본을 고쳐 저장하고, 저장에 성공했을 때만 화면에 반영
+const cloneS=s=>JSON.parse(JSON.stringify(s));
 async function delStudent(id){
   if(!confirm('삭제하시겠습니까?'))return;
-  await apiDeleteStudent(id);
+  if(!await apiDeleteStudent(id))return;
   closeMod('studentModal');renderDashboard();
 }
 async function delJournal(id,idx){
   if(!confirm('삭제하시겠습니까?'))return;
-  const s=getStudents().find(x=>x.id===id);
-  if(s){s.journals.splice(idx,1);await apiSaveStudent(s);openStudent(id);}
+  const s=getStudents().find(x=>x.id===id);if(!s)return;
+  const c=cloneS(s);c.journals.splice(idx,1);
+  if(await apiSaveStudent(c))openStudent(id);
 }
 async function delOpinion(id,idx){
   if(!confirm('삭제하시겠습니까?'))return;
-  const s=getStudents().find(x=>x.id===id);
-  if(s){s.opinions.splice(idx,1);await apiSaveStudent(s);openStudent(id);}
+  const s=getStudents().find(x=>x.id===id);if(!s)return;
+  const c=cloneS(s);c.opinions.splice(idx,1);
+  if(await apiSaveStudent(c))openStudent(id);
 }
 function openJournalModal(){document.getElementById('j-date').value=new Date().toISOString().split('T')[0];document.getElementById('j-content').value='';document.getElementById('j-followup').value='';document.getElementById('journalModal').classList.add('open');}
 async function saveJournal(){
   const date=document.getElementById('j-date').value,type=document.getElementById('j-type').value,content=document.getElementById('j-content').value.trim(),followup=document.getElementById('j-followup').value.trim();
   if(!date||!content){alert('날짜와 상담 내용을 입력해주세요.');return;}
-  const s=getStudents().find(x=>x.id===currentStudentId);
-  if(s){if(!s.journals)s.journals=[];s.journals.push({date,type,content,followup});await apiSaveStudent(s);}
+  const s=getStudents().find(x=>x.id===currentStudentId);if(!s)return;
+  const c=cloneS(s);if(!c.journals)c.journals=[];c.journals.push({date,type,content,followup});
+  if(!await apiSaveStudent(c))return;   // 실패하면 입력 창을 닫지 않음
   closeMod('journalModal');openStudent(currentStudentId);
 }
 function openOpinionModal(){document.getElementById('op-date').value=new Date().toISOString().split('T')[0];document.getElementById('op-content').value='';document.getElementById('opinionModal').classList.add('open');}
@@ -792,8 +875,9 @@ async function saveOpinion(){
   if(!date||!content){alert('날짜와 의견 내용을 입력해주세요.');return;}
   const cls3=currentUser.cls?currentUser.cls.split('_')[2]||currentUser.cls:'';
   const writer=currentUser.role==='homeroom'?(currentUser.name?`${currentUser.name} (${currentUser.dept}과 ${currentUser.grade} ${cls3} 담임)`:`${currentUser.grade} ${cls3} 담임`):'진로교사';
-  const s=getStudents().find(x=>x.id===currentStudentId);
-  if(s){if(!s.opinions)s.opinions=[];s.opinions.push({date,content,writer});await apiSaveStudent(s);}
+  const s=getStudents().find(x=>x.id===currentStudentId);if(!s)return;
+  const c=cloneS(s);if(!c.opinions)c.opinions=[];c.opinions.push({date,content,writer});
+  if(!await apiSaveStudent(c))return;   // 실패하면 입력 창을 닫지 않음
   closeMod('opinionModal');openStudent(currentStudentId);
 }
 
@@ -843,7 +927,7 @@ async function addStudent(){
     phone:document.getElementById('f-phone').value,career:document.getElementById('f-career').value,
     gradeNote:document.getElementById('f-gradeNote').value,note:document.getElementById('f-note').value,
     year:getActiveYear(),journals,opinions:[]};
-  await apiSaveStudent(s);
+  if(!await apiSaveStudent(s))return;   // 실패하면 입력 내용을 지우지 않음
   ['f-name','f-num','f-phone','f-career','f-gradeNote','f-note'].forEach(id=>document.getElementById(id).value='');
   ['f-grade','f-class'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-dept').value='';
@@ -880,7 +964,8 @@ function selED(btn,d){
   btn.style.background=dc(d);btn.style.color='white';document.getElementById('e-dept').value=d;
 }
 async function saveEdit(){
-  const s=getStudents().find(x=>x.id===currentStudentId);if(!s)return;
+  const orig=getStudents().find(x=>x.id===currentStudentId);if(!orig)return;
+  const s=cloneS(orig);
   const dept=document.getElementById('e-dept').value;
   const grade=document.getElementById('e-grade').value;
   const cls=document.getElementById('e-cls').value;
@@ -889,7 +974,8 @@ async function saveEdit(){
   s.num=document.getElementById('e-num').value;s.gender=document.getElementById('e-gender').value;
   s.phone=document.getElementById('e-phone').value;s.career=document.getElementById('e-career').value;
   s.gradeNote=document.getElementById('e-gradeNote').value;s.note=document.getElementById('e-note').value;
-  await apiSaveStudent(s);closeMod('editModal');openStudent(currentStudentId);
+  if(!await apiSaveStudent(s))return;
+  closeMod('editModal');openStudent(currentStudentId);
 }
 
 // ===== 검색 =====
@@ -942,9 +1028,18 @@ async function addYear(){
   await saveConfig();renderYearTabs();
 }
 async function changeCareerPw(){
-  const v=document.getElementById('newCareerPw').value;if(!v){alert('새 암호를 입력하세요.');return;}
-  config.careerPw=v;await saveConfig();
-  document.getElementById('newCareerPw').value='';alert('진로교사 암호가 변경되었습니다.');
+  const v=document.getElementById('newCareerPw').value,v2=document.getElementById('newCareerPw2').value;
+  if(!v){alert('새 암호를 입력하세요.');return;}
+  if(v.length<MIN_PW){alert(`암호는 ${MIN_PW}자 이상으로 정해 주세요.`);return;}
+  if(v!==v2){alert('두 칸에 입력한 암호가 서로 다릅니다.');return;}
+  showLoading(true,'암호 변경 중...');
+  try{
+    await api('changeCareerPw',{newPw:v});
+    auth.pw=v;   // 이후 요청은 새 암호로
+    showLoading(false);
+    document.getElementById('newCareerPw').value='';document.getElementById('newCareerPw2').value='';
+    alert('진로교사 암호가 변경되었습니다.');
+  }catch(e){showLoading(false);handleApiError(e,'암호 변경');}
 }
 
 // ===== 학반 관리 =====
@@ -1012,7 +1107,7 @@ function renderHRCards(){
     const card=document.createElement('div');card.className='hrcard';
     card.innerHTML=`<b style="min-width:40px;font-size:14px;color:#2c3e50;">${c}</b>
       <input type="text" id="nm_${sid}" placeholder="담임 선생님 이름" value="${entry.teacherName||''}" style="width:150px;">
-      <input type="password" id="pw_${sid}" placeholder="로그인 암호" value="${entry.pw||''}" style="width:130px;">
+      <input type="password" id="pw_${sid}" placeholder="${entry.hasPw?'설정됨 (바꿀 때만 입력)':'암호 미설정 (6자 이상)'}" value="" autocomplete="new-password" style="width:170px;">
       <button class="btn bp bsm" onclick="saveHRCard('${ikey}','${sid}')">저장</button>
       <span id="sv_${sid}" class="hrsaved">✓ 저장됨</span>
       <button class="xbtn" style="font-size:18px;margin-left:auto;" onclick="delHRClass('${key}',${ci})">×</button>`;
@@ -1022,9 +1117,12 @@ function renderHRCards(){
 async function saveHRCard(ikey,sid){
   const name=document.getElementById('nm_'+sid)?.value.trim()||'';
   const pw=document.getElementById('pw_'+sid)?.value||'';
+  if(pw&&pw.length<MIN_PW){alert(`반 암호는 ${MIN_PW}자 이상으로 정해 주세요.`);return;}
   if(!config.classInfo)config.classInfo={};
-  config.classInfo[ikey]={teacherName:name,pw};
-  await saveConfig();
+  config.classInfo[ikey]=Object.assign({},config.classInfo[ikey],{teacherName:name});
+  const extra={};extra[ikey]={teacherName:name};if(pw)extra[ikey].newPw=pw;   // 새로 입력한 경우에만 암호 변경
+  if(!await saveConfig(extra))return;
+  renderHRCards();
   const b=document.getElementById('sv_'+sid);if(b){b.style.display='inline';setTimeout(()=>b.style.display='none',2000);}
 }
 async function delHRClass(key,ci){
@@ -1036,7 +1134,10 @@ async function delHRClass(key,ci){
 
 // ===== 백업 =====
 function exportAll(){
-  const p={exportedAt:new Date().toISOString(),version:'2.0',students:getStudents(),config};
+  // (보안 수정) 백업 파일에는 암호를 넣지 않음
+  const ci={};Object.keys(config.classInfo||{}).forEach(k=>{ci[k]={teacherName:config.classInfo[k].teacherName||''};});
+  const safeCfg={years:config.years,activeYear:config.activeYear,hr:config.hr,classInfo:ci};
+  const p={exportedAt:new Date().toISOString(),version:'2.1',students:getStudents(),config:safeCfg};
   dl(JSON.stringify(p,null,2),`상담일지_전체백업_${today()}.json`);
 }
 function exportByYear(){
@@ -1057,20 +1158,22 @@ async function importJSON(e){
       showLoading(true,'구글 시트에 데이터 저장 중...');
       const exIds=new Set(getStudents().map(s=>s.id));
       const newS=data.students.filter(s=>!exIds.has(s.id));
-      for(const s of newS){
-        await apiFetch({action:'save',data:JSON.stringify(s)});
-        students.push(s);
-      }
+      // (보안 수정) 한 번에 서버로 보내 새 저장 방식으로 저장
+      const r=await api('importStudents',{students:newS});
       if(data.config){
         if(data.config.hr)config.hr={...config.hr,...data.config.hr};
-        if(data.config.classInfo)config.classInfo={...config.classInfo,...data.config.classInfo};
+        // 예전 백업 파일에 암호가 들어 있어도 담임 이름만 가져옴 (암호는 그대로 유지)
+        if(data.config.classInfo)Object.keys(data.config.classInfo).forEach(k=>{
+          config.classInfo[k]=Object.assign({},config.classInfo[k],{teacherName:data.config.classInfo[k]?.teacherName||config.classInfo[k]?.teacherName||''});
+        });
         if(data.config.years){config.years=[...new Set([...config.years,...data.config.years])];}
         await saveConfig();
       }
+      await reloadData();
       showLoading(false);
-      alert(`완료! 학생 ${newS.length}명을 불러왔습니다.`);
-      renderSettings();renderDashboard();
-    }catch(err){showLoading(false);alert('파일을 읽는 중 오류가 발생했습니다.');}
+      alert(`완료! 학생 ${r.added||0}명을 불러왔습니다.`);
+      if(currentUser){renderSettings();renderDashboard();}
+    }catch(err){showLoading(false);if(err.code)handleApiError(err,'불러오기');else alert('파일을 읽는 중 오류가 발생했습니다.\n'+err.message);}
     e.target.value='';
   };
   reader.readAsText(file,'utf-8');
@@ -1088,7 +1191,7 @@ document.querySelectorAll('.mbg').forEach(m=>m.addEventListener('click',function
 
 // ===== 초기 실행 =====
 (async()=>{
-  await loadAll();
+  await loadPublic();   // (보안 수정) 시작할 때는 공개 정보만
   showLoading(false);
   document.getElementById('loginScreen').style.display='flex';
 })();
